@@ -1,0 +1,755 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DigitalOcean Monitor</title>
+
+  <style>
+    :root {
+      color-scheme: dark;
+      --background: #1e1f22;
+      --card-background: #222427;
+      --border: #303236;
+      --grid: #34373b;
+      --text: #e5e7eb;
+      --muted: #92979e;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 28px;
+      color: var(--text);
+      background: var(--background);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 26px;
+      font-weight: 600;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .badge {
+      padding: 8px 12px;
+      color: #86efac;
+      background: #183525;
+      border: 1px solid #285538;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      min-width: 0;
+      padding: 18px;
+      background: var(--card-background);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .chart-wrap {
+      width: 100%;
+      margin-top: 16px;
+    }
+
+    .chart-svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      overflow: visible;
+    }
+
+    .chart-grid {
+      stroke: var(--grid);
+      stroke-width: 1;
+      opacity: 0.7;
+    }
+
+    .chart-line {
+      fill: none;
+      stroke-width: 1.6;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+    }
+
+    .chart-area {
+      stroke: none;
+    }
+
+    .chart-point {
+      stroke-width: 1.5;
+    }
+
+    .chart-value {
+      fill: #c1c5ca;
+      font-size: 10px;
+      text-anchor: middle;
+    }
+
+    .chart-y-label {
+      fill: #92979e;
+      font-size: 10px;
+      text-anchor: end;
+    }
+
+    .chart-time {
+      fill: #777d83;
+      font-size: 10px;
+      text-anchor: middle;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      margin-top: 14px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #c1c5ca;
+      font-size: 11px;
+    }
+
+    .legend-line {
+      display: inline-block;
+      width: 15px;
+      height: 3px;
+      border-radius: 2px;
+    }
+
+    .empty {
+      padding: 36px 8px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 13px;
+    }
+
+    footer {
+      margin-top: 22px;
+      color: #777d83;
+      font-size: 11px;
+      line-height: 1.7;
+    }
+
+    @media (max-width: 850px) {
+      body {
+        padding: 16px;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div>
+      <h1>DigitalOcean Monitor</h1>
+      <div class="muted" id="metadata">Memuat informasi...</div>
+    </div>
+
+    <div class="badge">Historical Metrics · 1 Hour</div>
+  </header>
+
+  <main class="grid" id="dashboard"></main>
+
+  <script>
+    const data = __DASHBOARD_DATA__;
+
+    // ============================================================
+    // PALET WARNA
+    // ============================================================
+
+    const palette = [
+      "#22C55E",
+      "#3B82F6",
+      "#F59E0B",
+      "#A855F7",
+      "#06B6D4",
+      "#F43F5E",
+      "#F97316",
+      "#84CC16",
+      "#EC4899",
+      "#8B5CF6",
+      "#14B8A6",
+      "#EAB308"
+    ];
+
+    const metricColors = {
+      cpu_usage: {
+        "CPU": "#22C55E"
+      },
+
+      memory: {
+        "Memory": "#3B82F6"
+      },
+
+      cpu_load: {
+        "1": "#F59E0B",
+        "5": "#A855F7",
+        "15": "#06B6D4"
+      },
+
+      disk_usage: {
+        "disk total": "#F43F5E",
+        "/dev/vda1 /": "#22C55E",
+        "/dev/vda2 /efi": "#F59E0B"
+      },
+
+      disk_io: {
+        "read - vda": "#3B82F6",
+        "read - vdb": "#06B6D4",
+        "write - vda": "#F97316",
+        "write - vdb": "#A855F7"
+      },
+
+      bandwidth: {
+        "private - inbound": "#22C55E",
+        "public - inbound": "#3B82F6",
+        "private - outbound": "#F59E0B",
+        "public - outbound": "#EC4899"
+      }
+    };
+
+    function getSeriesColor(metricKey, seriesName, index) {
+      return metricColors[metricKey]?.[seriesName]
+        || palette[index % palette.length];
+    }
+
+    // ============================================================
+    // DEFINISI GRAFIK
+    // ============================================================
+
+    const definitions = [
+      {
+        key: "cpu_usage",
+        title: "CPU Usage",
+        description: "Penggunaan CPU"
+      },
+      {
+        key: "memory",
+        title: "Memory",
+        description: "Penggunaan memori"
+      },
+      {
+        key: "cpu_load",
+        title: "CPU Load Average",
+        description: "Load average 1, 5, dan 15 menit"
+      },
+      {
+        key: "disk_usage",
+        title: "Disk Usage",
+        description: "Penggunaan disk per volume"
+      },
+      {
+        key: "disk_io",
+        title: "Disk I/O",
+        description: "Aktivitas baca dan tulis per device"
+      },
+      {
+        key: "bandwidth",
+        title: "Bandwidth",
+        description: "Trafik jaringan private dan public"
+      }
+    ];
+
+    // ============================================================
+    // METADATA
+    // ============================================================
+
+    const startDate = new Date(data.window_start);
+    const endDate = new Date(data.window_end);
+    const collectedDate = new Date(data.collected_at);
+
+    document.getElementById("metadata").textContent =
+      `Droplet ${data.droplet_id} · ` +
+      `${startDate.toLocaleString("id-ID")} — ` +
+      `${endDate.toLocaleString("id-ID")} · ` +
+      `Dikumpulkan ${collectedDate.toLocaleString("id-ID")}`;
+
+    // ============================================================
+    // SVG HELPER
+    // ============================================================
+
+    function createSvgElement(tag, attributes = {}) {
+      const element = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        tag
+      );
+
+      for (const [key, value] of Object.entries(attributes)) {
+        element.setAttribute(key, value);
+      }
+
+      return element;
+    }
+
+    // ============================================================
+    // FORMAT ANGKA
+    // ============================================================
+
+    function formatValue(value) {
+      const abs = Math.abs(value);
+
+      if (abs >= 1_000_000) {
+        return (value / 1_000_000).toFixed(2) + "M";
+      }
+
+      if (abs >= 10_000) {
+        return (value / 1_000).toFixed(1) + "k";
+      }
+
+      if (abs >= 1_000) {
+        return (value / 1_000).toFixed(2) + "k";
+      }
+
+      if (abs >= 100) {
+        return value.toFixed(1);
+      }
+
+      return Number(value.toPrecision(3)).toString();
+    }
+
+    function formatAxisValue(value) {
+      const abs = Math.abs(value);
+
+      if (abs >= 1_000_000) {
+        return (value / 1_000_000).toFixed(1) + "M";
+      }
+
+      if (abs >= 10_000) {
+        return (value / 1_000).toFixed(0) + "k";
+      }
+
+      if (abs >= 1_000) {
+        return (value / 1_000).toFixed(1) + "k";
+      }
+
+      if (abs > 0 && abs < 0.01) {
+        return value.toExponential(1);
+      }
+
+      if (abs < 10) {
+        return Number(value.toPrecision(3)).toString();
+      }
+
+      return Number(value.toFixed(1)).toString();
+    }
+
+    // ============================================================
+    // DYNAMIC Y-AXIS
+    // ============================================================
+
+    function niceNumber(value, round = false) {
+      if (!Number.isFinite(value) || value <= 0) {
+        return 1;
+      }
+
+      const exponent = Math.floor(Math.log10(value));
+      const fraction = value / (10 ** exponent);
+
+      let niceFraction;
+
+      if (round) {
+        if (fraction < 1.5) {
+          niceFraction = 1;
+        } else if (fraction < 3) {
+          niceFraction = 2;
+        } else if (fraction < 7) {
+          niceFraction = 5;
+        } else {
+          niceFraction = 10;
+        }
+      } else {
+        if (fraction <= 1) {
+          niceFraction = 1;
+        } else if (fraction <= 2) {
+          niceFraction = 2;
+        } else if (fraction <= 5) {
+          niceFraction = 5;
+        } else {
+          niceFraction = 10;
+        }
+      }
+
+      return niceFraction * (10 ** exponent);
+    }
+
+    function calculateYAxis(values, tickCount = 4) {
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+
+      // Beri ruang saat semua nilai sama.
+      if (min === max) {
+        const padding = Math.abs(min) * 0.05 || 1;
+        const lower = min - padding;
+        const upper = max + padding;
+        const step = niceNumber(
+          (upper - lower) / tickCount,
+          true
+        );
+
+        return {
+          min: Math.floor(lower / step) * step,
+          max: Math.ceil(upper / step) * step,
+          step
+        };
+      }
+
+      const rawStep = (max - min) / tickCount;
+      const step = niceNumber(rawStep, true);
+
+      return {
+        min: Math.floor(min / step) * step,
+        max: Math.ceil(max / step) * step,
+        step
+      };
+    }
+
+    // ============================================================
+    // DRAW CHART
+    // ============================================================
+
+    function drawChart(svg, seriesList, metricKey) {
+      const width = 820;
+      const height = 190;
+
+      const left = 60;
+      const right = 12;
+      const top = 24;
+      const bottom = 24;
+
+      const plotWidth = width - left - right;
+      const plotHeight = height - top - bottom;
+      const baseline = top + plotHeight;
+
+      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      svg.setAttribute("class", "chart-svg");
+
+      // Buang nilai tidak valid.
+      const validSeries = seriesList.map(series => ({
+        ...series,
+        points: (series.points || [])
+          .filter(point =>
+            Number.isFinite(point.timestamp) &&
+            Number.isFinite(point.value)
+          )
+          .sort((a, b) => a.timestamp - b.timestamp)
+      }));
+
+      const allPoints = validSeries.flatMap(
+        series => series.points
+      );
+
+      if (!allPoints.length) {
+        return false;
+      }
+
+      const minTime = Math.min(
+        ...allPoints.map(point => point.timestamp)
+      );
+
+      const maxTime = Math.max(
+        ...allPoints.map(point => point.timestamp)
+      );
+
+      // Y-axis dihitung berdasarkan nilai grafik ini.
+      const axis = calculateYAxis(
+        allPoints.map(point => point.value),
+        4
+      );
+
+      const minValue = axis.min;
+      const maxValue = axis.max;
+      const step = axis.step;
+
+      const x = timestamp =>
+        left +
+        ((timestamp - minTime) / (maxTime - minTime || 1)) *
+          plotWidth;
+
+      const y = value =>
+        top +
+        (1 - (value - minValue) / (maxValue - minValue)) *
+          plotHeight;
+
+      // Grid dan label Y-axis dinamis.
+      const tickCount = Math.min(
+        10,
+        Math.round((maxValue - minValue) / step)
+      );
+
+      for (let i = 0; i <= tickCount; i++) {
+        const value = minValue + step * i;
+        const py = y(value);
+
+        svg.appendChild(createSvgElement("line", {
+          x1: left,
+          y1: py,
+          x2: width - right,
+          y2: py,
+          class: "chart-grid"
+        }));
+
+        const label = createSvgElement("text", {
+          x: left - 8,
+          y: py + 4,
+          class: "chart-y-label"
+        });
+
+        label.textContent = formatAxisValue(value);
+        svg.appendChild(label);
+      }
+
+      // Label waktu pada X-axis.
+      for (let i = 0; i <= 4; i++) {
+        const timestamp =
+          minTime + ((maxTime - minTime) * i / 4);
+
+        const px = x(timestamp);
+
+        svg.appendChild(createSvgElement("line", {
+          x1: px,
+          y1: top,
+          x2: px,
+          y2: baseline,
+          stroke: "#303236",
+          "stroke-width": 1,
+          opacity: 0.35
+        }));
+
+        const label = createSvgElement("text", {
+          x: px,
+          y: height - 4,
+          class: "chart-time"
+        });
+
+        label.textContent = new Date(timestamp).toLocaleTimeString(
+          "id-ID",
+          {
+            hour: "2-digit",
+            minute: "2-digit"
+          }
+        );
+
+        svg.appendChild(label);
+      }
+
+      // Garis dan area setiap series/partisi.
+      validSeries.forEach((series, index) => {
+        const points = series.points;
+
+        if (!points.length) {
+          return;
+        }
+
+        const color = getSeriesColor(
+          metricKey,
+          series.name,
+          index
+        );
+
+        const coordinates = points.map(point => ({
+          x: x(point.timestamp),
+          y: y(point.value),
+          value: point.value,
+          timestamp: point.timestamp
+        }));
+
+        const linePath = coordinates.map(
+          (point, pointIndex) =>
+            `${pointIndex === 0 ? "M" : "L"} ` +
+            `${point.x.toFixed(2)} ${point.y.toFixed(2)}`
+        ).join(" ");
+
+        const firstPoint = coordinates[0];
+        const lastPoint = coordinates[coordinates.length - 1];
+
+        const areaPath =
+          `${linePath} ` +
+          `L ${lastPoint.x.toFixed(2)} ${baseline.toFixed(2)} ` +
+          `L ${firstPoint.x.toFixed(2)} ${baseline.toFixed(2)} Z`;
+
+        // Area transparan sesuai warna masing-masing series.
+        svg.appendChild(createSvgElement("path", {
+          d: areaPath,
+          class: "chart-area",
+          fill: color,
+          "fill-opacity": validSeries.length === 1
+            ? "0.16"
+            : "0.07"
+        }));
+
+        // Garis series.
+        svg.appendChild(createSvgElement("path", {
+          d: linePath,
+          class: "chart-line",
+          stroke: color
+        }));
+
+        // Label nilai di awal, tengah, dan akhir.
+        const indexes = [...new Set([
+          0,
+          Math.floor((coordinates.length - 1) / 2),
+          coordinates.length - 1
+        ])];
+
+        indexes.forEach(pointIndex => {
+          const point = coordinates[pointIndex];
+
+          svg.appendChild(createSvgElement("circle", {
+            cx: point.x,
+            cy: point.y,
+            r: 2.5,
+            class: "chart-point",
+            fill: color,
+            stroke: color
+          }));
+
+          const label = createSvgElement("text", {
+            x: point.x,
+            y: Math.max(12, point.y - 10),
+            class: "chart-value"
+          });
+
+          label.textContent = formatValue(point.value);
+          svg.appendChild(label);
+        });
+      });
+
+      return true;
+    }
+
+    // ============================================================
+    // RENDER DASHBOARD
+    // ============================================================
+
+    const dashboard = document.getElementById("dashboard");
+
+    definitions.forEach(definition => {
+      const seriesList = data.charts[definition.key] || [];
+
+      const card = document.createElement("section");
+      card.className = "card";
+
+      const header = document.createElement("div");
+      header.className = "card-header";
+
+      const titleGroup = document.createElement("div");
+
+      const title = document.createElement("h2");
+      title.textContent = definition.title;
+
+      const description = document.createElement("div");
+      description.className = "muted";
+      description.textContent = definition.description;
+
+      titleGroup.append(title, description);
+      header.appendChild(titleGroup);
+
+      const chartWrap = document.createElement("div");
+      chartWrap.className = "chart-wrap";
+
+      const svg = createSvgElement("svg", {
+        role: "img",
+        "aria-label": definition.title
+      });
+
+      const legend = document.createElement("div");
+      legend.className = "legend";
+
+      chartWrap.appendChild(svg);
+      card.append(header, chartWrap, legend);
+
+      const hasData = drawChart(
+        svg,
+        seriesList,
+        definition.key
+      );
+
+      if (!hasData) {
+        chartWrap.innerHTML = "";
+
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent =
+          "Tidak ada data numerik dalam rentang ini.";
+
+        chartWrap.appendChild(empty);
+      }
+
+      // Legend menggunakan warna yang sama dengan grafik.
+      seriesList.forEach((series, index) => {
+        if (!series.points || !series.points.length) {
+          return;
+        }
+
+        const color = getSeriesColor(
+          definition.key,
+          series.name,
+          index
+        );
+
+        const item = document.createElement("div");
+        item.className = "legend-item";
+
+        const line = document.createElement("span");
+        line.className = "legend-line";
+        line.style.backgroundColor = color;
+
+        const label = document.createElement("span");
+        label.textContent = series.name;
+
+        item.append(line, label);
+        legend.appendChild(item);
+      });
+
+      dashboard.appendChild(card);
+    });
+  </script>
+</body>
+</html>
