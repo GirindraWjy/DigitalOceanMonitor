@@ -27,6 +27,41 @@ def format_value(value: float) -> str:
     return f"{value:,.2f}"
 
 
+def format_metric_value(metric_name: str, value: float) -> str:
+    """Format nilai metrik dengan satuan yang sesuai."""
+
+    if metric_name in ("cpu_usage", "memory", "disk_usage"):
+        return f"{value:.2f}%"
+
+    if metric_name == "cpu_load":
+        return f"{value:.2f}"
+
+    if metric_name == "disk_io":
+        # Asumsi nilai API dalam byte per detik.
+        mb_per_sec = value / 1_000_000
+        if mb_per_sec >= 1:
+            return f"{mb_per_sec:.2f} MB/s"
+
+        kb_per_sec = value / 1_000
+        if kb_per_sec >= 1:
+            return f"{kb_per_sec:.2f} KB/s"
+
+        return f"{value:.2f} B/s"
+
+    if metric_name == "bandwidth":
+        # Asumsi nilai API dalam byte per detik.
+        mbps = value * 8 / 1_000_000
+        if mbps >= 1:
+            return f"{mbps:.2f} Mbps"
+
+        kbps = value * 8 / 1_000
+        if kbps >= 1:
+            return f"{kbps:.2f} Kbps"
+
+        return f"{value * 8:.2f} bps"
+
+    return f"{value:,.2f}"
+
 def build_discord_message(result: dict) -> str:
     """Susun pesan Discord dari nilai terakhir setiap series."""
 
@@ -62,8 +97,10 @@ def build_discord_message(result: dict) -> str:
                 timestamp / 1000
             ).astimezone().strftime("%H:%M:%S")
 
+            formatted_value = format_metric_value(metric_name, value)
+
             lines.append(
-                f"• {series_name}: {format_value(value)} "
+                f"• {series_name}: {formatted_value} "
                 f"(data: {time_text})"
             )
 

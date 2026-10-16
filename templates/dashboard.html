@@ -306,10 +306,9 @@
     const collectedDate = new Date(data.collected_at);
 
     document.getElementById("metadata").textContent =
-      `Droplet ${data.droplet_id} · ` +
       `${startDate.toLocaleString("id-ID")} — ` +
       `${endDate.toLocaleString("id-ID")} · ` +
-      `Dikumpulkan ${collectedDate.toLocaleString("id-ID")}`;
+      `Collected ${collectedDate.toLocaleString("id-ID")}`;
 
     // ============================================================
     // SVG HELPER
